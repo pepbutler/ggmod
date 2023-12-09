@@ -1,103 +1,90 @@
 from argparse import ArgumentParser
 from PyPAKParser import PakParser as PP
 
+from ggmod.const import *
+from ggmod.settings import *
+from ggmod import util
+
+import logging
 import shutil
 import os
+import re
 
-HOME_DIR = os.getenv("HOME")
-MODS_DIR = f"{HOME_DIR}/.steam/debian-installation/steamapps/common/GUILTY GEAR STRIVE/RED/Content/Paks/~mods"
-
-BASE_DIR = os.path.join(os.curdir, "mods")
-DOWNLOAD_DIR = os.path.join(os.curdir, "downloads")
-
-GB_DOWNLOAD_LINK = "https://files.gamebanana.com/mods"
-GB_INFO_LINK = "https://gamebanana.com/apiv10/Mod/{}/DownloadPage"
-
-CHAR_IDS = {
-    "ASK": "Asuka R#",
-    "SOL": "Sol Badguy",
-    "KYK": "Ky Kiske",
-    "MAY": "May",
-    "AXL": "Axl Low",
-    "CHP": "Chipp Zanuff",
-    "POT": "Potemkin",
-    "FAU": "Faust",
-    "MLL": "Millia Rage",
-    "ZAT": "Zato-1",
-    "RAM": "Ramlethal",
-    "LEO": "Leo Whitefang",
-    "NAG": "Nagoryuki",
-    "GIO": "Giovanna",
-    "ANJ": "Anji Mito",
-    "INO": "I-No",
-    "GLD": "Goldlewis",
-    "JKO": "Jack-O",
-    "COS": "Happy Chaos",
-    "BKN": "Baiken",
-    "TST": "Testament",
-    "SIN": "Sin Kiske",
-    "BGT": "Bridget",
-    "ELP": "Elphelt", 
-}
+from typing import Dict
 
 
-def yn_choice(prompt):
-    return input(prompt).lower().startswith("y")
+
+class Mod:
+    def __init__(self, info: Dict):
+        self.filename = info
 
 
-def mkdir_if_missing(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
+def input_yn(prompt, *args):
+    return input(prompt.format(*args)).lower().startswith("y")
 
 
-def download_mod(mod_id):
-    import requests
+def choose_mod_dl(modpage_url)
+    info_response = requests.get(GB_INFO_URL.format(mod_id))
+    logging.debug(f"<{info_response.status_code}> {info_response.text[:50]}")
 
-    inf_response = requests.get(GB_INFO_LINK.format(mod_id))
-    print(f"[* <{inf_response.status_code}>] Requesting mod info for {mod_id}")
+    if info_response.status_code > 399:
+        logging.warning(f"<{info_response.status_code}> {info_response.text}"
 
-    info = inf_response.json()
-    files = info["_aFiles"]
+    print(f"[*] Requesting mod info for {mod_id}")
 
-    if len(files) == 1:
-        mod_file = files[0]["_sFile"]
-        download_url = files[0]["_sDownloadUrl"]
+    info = info_response.json()
+    mods = info["_aFiles"]
+
+    mods_info = map(lambda i: i["_sFile"], i["_sDescription"], i["_sDownloadUrl"], mods)
+
+    if len(mods_info) > 1:
+        for i, info in enumerate(mods_info):
+            print(f"[{i + 1}] {info[0]}: {info[1]}")
+
+        choice = input("Choice no. -> ")
+        if not choice.match("[0-9]+", choice):
+            e = "Invalid choice of mod '{}'".format(choice)
+            raise ValueError(e)
+        else:
+            choice = int(choice) - 1
     else:
-        for i, file in enumerate(files):
-            mod_file = file["_sFile"]
-            mod_desc = file["_sDescription"]
-            print(f"[{i + 1}] {mod_file} - {mod_desc}")
+        choice = 0
+        info = mods_info[choice]
+        print(f"[*] Target: {info[0]} by {info[1]}")
 
-        choice = int(input("Choice no. -> ")) - 1
-        download_url = files[choice]["_sDownloadUrl"]
-        mod_file = files[choice]["_sFile"]
+    return mods_info[choice][0:-1]
 
+
+
+def download_mod(download_url, filename):
     if download_url.startswith("unverum"):
         download_url = download_url.replace("unverum:", "").replace("mmdl", "dl").split(",")[0]
 
-    dl_mod_file = os.path.join(DOWNLOAD_DIR, mod_file)
+    dl_mod_file = os.path.join(DOWNLOAD_DIR, filename)
     if os.path.exists(dl_mod_file):
         print(f"[*] Using cached downloads/{mod_file}")
-        os.rename(dl_mod_file, mod_file)
+        return dl_mod_file
     else:
-        print(f"[*] Downloading {mod_file} {download_url}")
+        print(f"[*] Downloading {mod_file} from {download_url}")
         dl_response = requests.get(download_url)
 
         print(f"[*] Writing {mod_file}")
-        with open(mod_file, "wb") as f:
+        with open(dl_mod_file, "wb") as f:
             f.write(dl_response.content)
 
         print(f"[!] Downloaded {mod_file}")
 
-    return mod_file
+    return dl_mod_file
 
 
-def decompress_mod(fn: str):
-    # this may cause problems
-    if fn.endswith("rar") or fn.endswith("zip") or fn.endswith("7z"):
-        os.system(f"7z e {fn}")
+def decompress_mod(filename: str):
+    if filename.endswith("rar") or filename.endswith("zip") or filename.endswith("7z"):
+        os.system(f"7z e {filename} -o {MOD_DIR}")
+    else:
+        e = "Unknown archive format from file {}".format(filename)
+        raise ValueError(e)
 
-    sigfile = None
+    sigfile = pakfile = None
     *_, local_files = next(os.walk(os.curdir))
     for file in local_files:
         if file.endswith("pak"):
@@ -108,12 +95,12 @@ def decompress_mod(fn: str):
     if sigfile is None:
         old_sigfile = os.path.join(os.curdir, "sigfile.sig")
         sigfile = os.path.join(os.curdir, pakfile.rstrip(".pak") + ".sig")
-        os.rename(old_sigfile, sigfile)
+        shutil.move(old_sigfile, sigfile)
 
-    download_path = os.path.join(DOWNLOAD_DIR, fn)
+    download_path = os.path.join(DOWNLOAD_DIR, filename)
     print(download_path)
-    mkdir_if_missing(DOWNLOAD_DIR)
-    os.rename(fn, download_path)
+    util.mkdir(DOWNLOAD_DIR)
+    shutil.move(filename, download_path)
     return pakfile, sigfile
 
 
@@ -159,9 +146,9 @@ def get_mod_info(fn):
         else:
             slot = ""
 
-    is_correct = yn_choice("[?] Is this correct? (Y/n) -> ")
+    is_correct = input_yn("[?] Is this correct? (Y/n) -> ")
     if not is_correct:
-        is_mesh_mod = yn_choice("Is mesh mod? (Y/n) -> ")
+        is_mesh_mod = input_yn("[?] Is mesh mod? (Y/n) -> ")
         if not is_mesh_mod:
             slot = int(input("Slot(number) -> "))
             slot = f"{slot:02d}"
@@ -175,11 +162,11 @@ def get_mod_info(fn):
 def place_mod(char_id, pak_fn, sig_fn, is_mesh, slot):
     dir_append = "mesh" if is_mesh else slot
     chosen_dir = os.path.join(BASE_DIR, char_id, dir_append)
-    mkdir_if_missing(chosen_dir)
+    util.mkdir(chosen_dir)
 
     if os.listdir(chosen_dir):
         print(f"[!] Mod found at {dir_append} slot for {CHAR_IDS[char_id]}")
-        do_replace = yn_choice("Replace existing mod? (Y/n) -> ")
+        do_replace = input_yn("[?] Replace existing mod? (Y/n) -> ")
 
         if do_replace:
             *_, marked_files = next(os.walk(chosen_dir))
@@ -188,7 +175,7 @@ def place_mod(char_id, pak_fn, sig_fn, is_mesh, slot):
                 os.remove(os.path.join(chosen_dir, marked_file))
         else:
             if is_mesh:
-                do_add = yn_choice("Add mod instead? (Y/n) -> ")
+                do_add = input_yn("Add mod instead? (Y/n) -> ")
                 if do_add:
                     print("[*] Adding mod")
                     pass
@@ -199,76 +186,94 @@ def place_mod(char_id, pak_fn, sig_fn, is_mesh, slot):
                 print("[!] Cancelling mod download!")
                 return
 
-    os.rename(pak_fn, os.path.join(chosen_dir, pak_fn))
-    os.rename(sig_fn, os.path.join(chosen_dir, sig_fn))
+    shutil.move(pak_fn, os.path.join(chosen_dir, pak_fn))
+    shutil.move(sig_fn, os.path.join(chosen_dir, sig_fn))
 
 
-def download(mod_id):
-    mod_fn = download_mod(mod_id)
-    pak_fn, sig_fn = decompress_mod(mod_fn)
-    is_mesh_mod, char_id, slot = get_mod_info(pak_fn)
+def download(mod_urls):
+    import requests
 
-    place_mod(char_id, pak_fn, sig_fn, is_mesh_mod, slot)
+    for url in mod_urls:
+        if not re.match(MODPAGE_URL_RE, url):
+            e = "Invalid download link '{}' provided".format(download_mod)
+            raise ValueError(e)
+        else:
+            logging.debug(f"{url} matches {MODPAGE_URL_RE}")
+
+        download_link, filename = choose_mod_dl(url)
+
+        download_mod(download_link, filename)
+        pak_fn, sig_fn = decompress_mod(filename)
+        is_mesh_mod, char_id, slot = get_mod_info(pak_fn)
+        place_mod(char_id, pak_fn, sig_fn, is_mesh_mod, slot)
 
 
-def sync():
-    mkdir_if_missing(MODS_DIR)
+def sync(args):
+    force = args[0]
 
     all_files = []
     all_flat_files = []
-    for root, _, files in os.walk(BASE_DIR):
+    for root, _, files in os.walk(GAME_MOD_DIR):
         all_flat_files += files
         all_files += list(map(lambda f: os.path.join(root, f), files))
 
-    *_, active_mods = next(os.walk(MODS_DIR))
-    for mod in active_mods:
-        os.remove(os.path.join(MODS_DIR, mod))
-        print(f"[!] Removing {os.path.join(MODS_DIR, mod)}")
+    if force:
+        *_, active_mods = next(os.walk(GAME_MOD_DIR))
+        for mod in active_mods:
+            os.remove(os.path.join(GAME_MOD_DIR, mod))
+            print(f"[!] Removing {os.path.join(GAME_MOD_DIR, mod)}")
 
     for path, flat_path in zip(all_files, all_flat_files):
-        # the only time shutil is used
         try:
-            shutil.copy(path, os.path.join(MODS_DIR, flat_path))
+            shutil.copy(path, os.path.join(GAME_MOD_DIR, flat_path))
         except BaseException as e:
-            print(e, path, os.path.join(MODS_DIR, flat_path))
+            log.warning(e, path, os.path.join(GAME_MOD_DIR, flat_path))
             exit()
-        print(f"[*] Copying {path} to {os.path.join(MODS_DIR, flat_path)}")
+        print(f"[*] Copying {path} to {os.path.join(GAME_MOD_DIR, flat_path)}")
 
 
-# $ ggmod download <link>
-#   ggmod remove <mod>
-#   ggmod list jacko
-#   ggmod use jacko skin <mod>
-#   ggmod use jacko mesh <mod>
-#   ggmod list nago 1 (slot 1)
-#   ggmod rename <old> <new>
+# ggmod download <link>
+# ggmod remove <mod>
+# ggmod list jacko
+# ggmod use jacko skin <mod>
+# ggmod use jacko mesh <mod>
+# ggmod list nago 1 (slot 1)
+# ggmod rename <old> <new>
+
+def parse_args():
+    parser = ArgumentParser()
+    subparsers = parser.add_subparsers(help="List of subcommands")
+
+    # Big ol' list of subcommands and their respective arguments/functions
+    down_parser = subparsers.add_parser("download",
+            help="Download a mod from a gamebanana link")
+    down_parser.add_argument("link",
+            help="Mod page or download url (taken from browser)")
+    down_parser.set_defaults(func=download)
+
+    sync_parser = subparsers.add_parser("sync",
+            help="Sync local mods with game directory")
+    down_parser.add_argument("-f", "--force", action="store_true",
+            help="Completley wipe the in-game mods directory and sync")
+    down_parser.set_defaults(func=sync)
+
+    args = parser.parse_args()
+
+    if not any(var(args)):
+        parser.error("Must specify an argument such as 'download' or 'sync'")
+
+    return args
 
 
 def main():
-    parser = ArgumentParser()
-    parser.add_argument("download", nargs="*")
-    parser.add_argument("remove", nargs="*")
-    parser.add_argument("sync", nargs="*")
-    parser.add_argument("list", nargs="*")
-    parser.add_argument("rename", nargs="*")
-    parser.add_argument("use", nargs="*")
-    args = parser.parse_args()
+    util.configure_logging()
 
-    if not any(vars(args).values()):
-        parser.error("Must specify an argument such as 'download' or 'list'")
+    util.mkdir(CONF_DIR)
+    util.mkdir(DOWNLOAD_DIR)
+    util.mkdir(GAME_MOD_DIR)
 
-    # WARNING: i broke argparse somehow??
-    if args.download:
-        actual_arg, *args = args.download
-        if actual_arg == "download":
-            if len(args) > 1:
-                print("[!] Installing multiple mods")
-                for arg in args:
-                    download(arg.split("/")[-1])
-            else:
-                download(args[0].split("/")[-1])
-        elif actual_arg == "sync":
-            sync()
+    args = parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":

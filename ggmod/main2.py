@@ -9,6 +9,7 @@ def main():
     bruh_parser.add_argument("a")
 
     parsed_args = parser.parse_args()
+    print(vars(parsed_args))
 
 if __name__ == "__main__":
     main()
