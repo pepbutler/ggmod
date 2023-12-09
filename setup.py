@@ -1,4 +1,3 @@
-"""ggst - setup.py"""
 import sys
 import setuptools
 
@@ -13,15 +12,6 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     long_description=LONG_DESC,
     license="MIT",
-    # url="https://github.com/dylanaraps/pywal",
-    # download_url=DOWNLOAD,
-    # classifiers=[
-    #     "Environment :: X11 Applications",
-    #     "License :: OSI Approved :: MIT License",
-    #     "Operating System :: POSIX :: Linux",
-    #     "Programming Language :: Python :: 3.5",
-    #     "Programming Language :: Python :: 3.6",
-    # ],
     packages=["ggmod"],
     entry_points={"console_scripts": ["ggmod=ggmod.main:main"]},
     python_requires=">=3.5",
