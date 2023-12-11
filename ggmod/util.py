@@ -7,7 +7,8 @@ def input_yn(prompt, *args):
 
 
 def create_dir(directory):
-    code = os.mkdirs(directory, exist_ok=True)
+    logging.debug("Create directory {}".format(directory))
+    return os.makedirs(directory, exist_ok=True)
 
 
 def get_request(url):
@@ -28,7 +29,4 @@ def convert_toolurl(url):
 
 
 def configure_logging():
-    logging.basicConfig(format='%[(levelname)]s\t%(message)s', level=logging.DEBUG)
-    logging.debug('This message should appear on the console')
-    logging.info('So should this')
-    logging.warning('And this, too')
+    logging.basicConfig(format='[%(levelname)s]\t%(message)s', level=logging.DEBUG)
