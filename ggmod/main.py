@@ -13,8 +13,21 @@ def download(args):
     for url in args.link:
         modpage = mods.ModPage(url)
 
-        for mod in modpage:
-            archive = mod.download()
+        if len(modpage) > 1:
+            archives = []
+
+            for i, mod in enumerate(modpage):
+                archives.append(mod.download())
+                if mod.is_mesh():
+                    print(f"[{i+1}] Mesh mod {mod.filename[0]} - {mod.description}")
+                else:
+                    print(f"[{i+1}] Colour{mod.get_slot()} mod {mod.filename[0]} - {mod.description}")
+
+            choice = int(input("[?] Choice: "))-1
+            modpage[choice].select(archives[choice])
+        else:
+            archives = mod.download()
+            mod.select(archives)
 
 
 def sync(args):
@@ -77,7 +90,7 @@ def parse_args():
 
 
 def main():
-    # util.configure_logging()
+    util.configure_logging()
 
     util.create_dir(CONF_DIR)
     util.create_dir(MODS_DIR)
