@@ -57,12 +57,32 @@ def sync(args):
 def parse_args():
     """
     ggmod download <link>
-    ggmod remove <mod(folder)>
-    ggmod list jacko
-    ggmod use jacko skin <mod>
-    ggmod use jacko mesh <mod>
-    ggmod list nago 1 (slot 1)
-    ggmod rename <old> <new>
+        - User can download a mod from a webpage, should
+          grant user freedom of choice and be robust
+        - Assigns a name to the new mod
+
+    ggmod remove <mod name>
+        - Delete mod files from staging folder, KEEP archive
+
+    ggmod clean
+        - Remove ALL archives in cache folder
+
+    ggmod list JKO
+        - Tabulated list of active and inactive mesh and
+          colour mods
+
+    ggmod use JKO col8 <mod name>
+        - Use a certain colour mod
+
+    ggmod use JKO mesh <mod name>
+        - Self-explanatory
+
+    ggmod rename <old name> <new name>
+        - Rename mod
+
+    ggmod sync
+        - Synchronise mod changes across staging folderand
+          and actual game dir
     """
 
     parser = ArgumentParser()
@@ -70,15 +90,15 @@ def parse_args():
 
     # Big ol' list of subcommands and their respective arguments/functions
     down_parser = subparsers.add_parser("download",
-            help="Download a mod from a gamebanana link")
+            help="Download a mod from gamebanana link")
     down_parser.add_argument("link", nargs="*",
-            help="Mod page or download url (taken from browser)")
+            help="Gamebanana mod page URL")
     down_parser.set_defaults(func=download)
 
     sync_parser = subparsers.add_parser("sync",
             help="Sync local mods with game directory")
     sync_parser.add_argument("-f", "--force", action="store_true",
-            help="Completley wipe the in-game mods directory and sync")
+            help="Completly wipe the in-game mods directory and sync")
     sync_parser.set_defaults(func=sync)
 
     args = parser.parse_args()

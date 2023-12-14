@@ -26,7 +26,7 @@ def decompress_into_dir(path: str, dirname: str) -> List[str]:
     create_dir(new_dir)
 
     os.system(f"7z e {path} -o{new_dir} ")
-    _*, files = os.walk(new_dir)
+    *_, files = os.walk(new_dir)
 
     logging.debug(f"Finished decompress in path {path}")
 
@@ -68,10 +68,14 @@ def convert_toolurl(url):
 
 
 def configure_logging(level=logging.DEBUG):
-    """Logging"""
+    """
+    Logging
+    """
     logging.basicConfig(format='[%(levelname)s]\t%(message)s', level=level)
 
 
 def input_yn(prompt, *args):
-    """bruh"""
+    """
+    bruh
+    """
     return input(prompt.format(*args)).lower().startswith("y")
