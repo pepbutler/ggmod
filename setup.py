@@ -1,13 +1,12 @@
-import sys
 import setuptools
 
-LONG_DESC = open('README.md').read()
+LONG_DESC = open("README.md").read()
 
 setuptools.setup(
     name="ggmod",
     # version=VERSION,
-    author="joe",
-    author_email="joe@momma.com",
+    author="James K.",
+    author_email="jameskowal10@gmail.com",
     description="Download and install guilty gear mods",
     long_description_content_type="text/markdown",
     long_description=LONG_DESC,
@@ -20,6 +19,7 @@ setuptools.setup(
         "requests>=2.31.0",
         "beautifulsoup4>=4.12.2",
     ],
-    #test_suite="tests",
-    #include_package_data=True,
-    zip_safe=False)
+    # test_suite="tests",
+    # include_package_data=True,
+    zip_safe=False,
+)
