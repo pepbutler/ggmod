@@ -1,9 +1,9 @@
 from ggmod import util
 from ggmod.const import GB_INFO_URL, CHAR_IDS
 from ggmod.settings import CACHE_DIR, MODS_DIR, DOWNLOAD_DIR, MODULE_DIR
-from ggmod.errors import MeshNotFoundError
+from ggmod.errors import SlotNotFoundError, CharNotFoundError
 
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, List
 
 from PyPAKParser import PakParser as PP
 
@@ -12,61 +12,36 @@ import shutil
 import os
 import bs4
 import json
-
-
-
-class ModDB:
-    """
-    Manage moddb.json stored mods - the stored JSON is a list of
-    JSON objects that can be restored to fully functional Mod()
-    python objects
-    """
-    def __init__(self):
-        self.path = os.path.join(CACHE_DIR, "mod_db.json")
-        
-        if not os.path.exists(self.path):
-            with open(path, "w") as fp:
-                json.dumps([], fp)
-
-        self._file_ro = open(self.path, "r")
-        self._db = json.load(self._file_ro)
-
-    def store_mod(self, mod: Mod) -> None:
-        """
-        Stores a mod as an object in a JSON file
-
-        :param mod: the mod to store in the file
-        """
-        mod_data = mod._convert_to_dict()
-        new_db = self._db.copy().append(mod_data)
-
-        with open(self.path, "w") as fp:
-            json.dump(new_db, fp)
-
-    def get_mods(self) -> List[Mod]:
-        """
-        Returns all mods stored as objects in the JSON file
-
-        :returns: list of stored Mod objects
-        """
-        mods = [Mod(**data) for data in self._db]
-        return mods
-
-    def clear(self) -> None:
-        """
-        Clears all mods in mod_db.json
-        """
-        with open(self.path, "w") as fp:
-            json.dump([], fp)
+import re
 
 
 class Mod:
     """
-    Mod class for future compatibility and updates
+    Represents and individual mod, i.e. an Unreal Engine 4 .pak file that contains an
+    alternative mesh or color slot alteration
+
+    Mod objects must have a name used for organising and referring to them in storage,
+    as well as metadata from gamebanana and from the user. If not provided then determine
+    it automatically. The staging method allows the user to correct the generated
     """
-    def __init__(self, name: str, info: Dict[str, Any], pakfile: str, sigfile: str,
-                 is_mesh=None: Optional[bool], slot=None: Optional[int], char_id=None: Optional[str],
-                 _staged=None: Optional[bool]):
+
+    def __init__(
+        self,
+        name: str,
+        info: Dict[str, Any],
+        pakfile: str,
+        sigfile: str,
+        is_mesh: Optional[bool] = None,
+        slot: Optional[int] = None,
+        char_id: Optional[str] = None,
+        _staged: Optional[bool] = None,
+    ):
+        """
+        Create a new mod object with provided metadata and properties
+
+        :param name: Shortened or colloquialised name of the mod
+        :param info: Metadata stipped from gamebanana website
+        """
         self.name = name
         self.filename = info["_sFile"]
         self.description = info["_sDescription"]
@@ -74,7 +49,7 @@ class Mod:
         self.pakfile = pakfile
         self.sigfile = sigfile
 
-        self.stored_dir = os.path.abspath(os.path.pardir(pakfile))
+        self.stored_dir = os.path.abspath(os.path.join(pakfile, os.pardir))
 
         if _staged is not None:
             self.staged = _staged
@@ -82,52 +57,53 @@ class Mod:
             self.staged = False
 
         self._pp = PP(open(pakfile, "rb"))
-        self._assets = map(lambda asset: pp.Unpack(asset), self._pp.List())
+        self._asset_paths = self._pp.List()
+        self._assets = map(lambda path: self._pp.Unpack(path), self._asset_paths)
 
-        self.char_id = char_id if char_id is not None else self.determine_char_id()
-        self.mesh = is_mesh if is_mesh is not None else self.determine_meshed_mod()
-        self.slot = slot if not mesh else self.determine_slot()
+        self._char_id = char_id if char_id is not None else self.determine_char_id()
+        self._mesh = is_mesh if is_mesh is not None else self.determine_meshed_mod()
+
+        if not self._mesh:
+            self._slot = slot if slot is not None else self.determine_slot()
+        else:
+            self._slot = None
 
     @property
     def char_id(self):
-        return self.char_id
+        return self._char_id
 
     @property
     def mesh(self):
-        return self.mesh
+        return self._mesh
 
     @property
     def slot(self):
-        return slot
+        return self._slot
 
     @char_id.setter
     def char_id(self, value):
-        if len(char_id) != 3 and char_id not in set(CHAR_IDS.keys()):
-            e = f"Character ID '{char_id}' - is invalid"
+        if len(value) != 3 and value not in set(CHAR_IDS.keys()):
+            e = f"Character ID '{value}' - is invalid"
             raise ValueError(e)
         else:
-            self.char_id = char_id.upper()
+            self._char_id = value.upper()
 
     @mesh.setter
-    def mesh(self, value: bool)
-        if value == slot:
-            e = "Conflicting non-exclusive mesh and slot values "
-            raise ValueError(e)
-        else:
-            self.mesh = value
-    
+    def mesh(self, value: bool):
+        self._mesh = value
+
     @slot.setter
-    def slot(self, value: str | int | False):
-        if not self.mesh and not value:
+    def slot(self, value: str | int):
+        if bool(self._mesh) == bool(value):
             e = "Conflicting non-exclusive mesh and slot values "
             raise ValueError(e)
 
-        if isinstance(slot, int):
-            slot = f"{slot:02d}"
+        if isinstance(value, int):
+            slot = f"{value:02d}"
         else:
             slot = value
 
-        self.slot = slot
+        self._slot = slot
 
     def determine_meshed_mod(self):
         """
@@ -135,7 +111,7 @@ class Mod:
 
         :returns: True if any of the directories for the assets contain the word "Mesh"
         """
-        return any(map(lambda asset: "Mesh" in asset.fileName, self._assets))
+        return any(map(lambda path: "mesh" in path.lower(), self._asset_paths))
 
     def determine_char_id(self):
         """
@@ -144,18 +120,24 @@ class Mod:
 
         :returns: three-letter character code
         """
-        char_id_search = map(lambda asset: re.search("Chara/([A-Z]{3})".encode(), asset.Data))
+        char_id_search = list(
+            map(
+                lambda asset: re.search("Chara/([A-Z]{3})".encode(), asset.Data),
+                self._assets,
+            )
+        )
         matches = []
 
-        for search_groups in char_id_search:
+        for search_groups in list(char_id_search):
             if search_groups is not None:
                 try:
-                    matches.append(search_groups.groups(0).decode("utf-8"))
+                    matches.append(search_groups.groups(0)[0].decode("utf-8"))
                 except IndexError as e:
                     raise CharNotFoundError from e
 
-        if not matches:
-            raise CharNotFoundError("No matching character string in pak file")
+        if not matches or matches == []:
+            e = "No matching character string in pak file"
+            raise CharNotFoundError(e)
         else:
             # return mode of the matches list (most common)
             return max(matches, key=matches.count)
@@ -167,26 +149,30 @@ class Mod:
 
         :returns: either a string matching the slot code or False if the mod is mesh mod
         """
-        slt_match_bytes = f"{self.char_id}/Costume[0-9]+/Material/Color([0-9]+)".encode()
-        slot_search = map(lambda asset: re.search(slt_match_bytes, asset.Data))
+
+        slt_match_bytes = (
+            f"{self.char_id}/Costume[0-9]+/Material/Color([0-9]+)".encode()
+        )
+        slot_search = list(
+            map(lambda asset: re.search(slt_match_bytes, asset.Data), self._assets)
+        )
         matches = []
 
-        for search_groups in char_id_search:
+        for search_groups in slot_search:
             if search_groups is not None:
                 try:
-                    matches.append(search_groups.groups(0).decode("utf-8"))
+                    matches.append(search_groups.groups(0)[0].decode("utf-8"))
                 except IndexError as e:
-                    raise CharNotFoundError from e
+                    raise SlotNotFoundError from e
 
         if not matches and not self.mesh:
-            raise SlotNotFoundError("No matching character string in pak file")
+            e = "No matching slot string in pak file"
+            raise SlotNotFoundError(e)
         else:
             # return mode of the matches list (most common)
             return max(matches, key=matches.count)
 
-        return False if self.mesh else slot
-
-    def override_props(self, is_mesh: bool, char_id: str, slot: int | str | False) -> None:
+    def override_props(self, is_mesh: bool, char_id: str, slot: int | str) -> None:
         """
         Override the properties if they are not detected properly. It's important
         to call this method BEFORE staging otherwise the mod will be categorised
@@ -207,11 +193,11 @@ class Mod:
         """
         stored_dir = os.path.join(MODS_DIR, self.name)
 
-        pakfile = self.pakfile.strip(os.sep).split(os.sep)[-1]
-        sigfile = self.sigfile.strip(os.sep).split(os.sep)[-1]
+        # pakfile = self.pakfile.strip(os.sep).split(os.sep)[-1]
+        # sigfile = self.sigfile.strip(os.sep).split(os.sep)[-1]
 
-        shutil.copy(pakfile, stored_dir)
-        shutil.copy(sigfile, stored_dir)
+        shutil.copy(self.pakfile, stored_dir)
+        shutil.copy(self.sigfile, stored_dir)
 
         self.stored_dir = stored_dir
         self.staged = True
@@ -221,7 +207,7 @@ class Mod:
         Remove mod from staging folder
         """
         if not self.staged:
-            e = f"Cannot unstage a mod that is not staged"
+            e = "Cannot unstage a mod that is not staged"
             raise ValueError(e)
 
         pakfile = self.pakfile.strip(os.sep).split(os.sep)[-1]
@@ -232,19 +218,18 @@ class Mod:
 
     def _convert_to_dict(self) -> str:
         """
-        Convert to json text form to be put into a .json file
+        Convert to dict form to be put into a .json file
         and given as kwargs to __init__ upon loading from said
         file
 
-        :returns: Valid JSON string of all class attributes
+        :returns: Dictionary of all arguments given to this class
         """
-
         self_data = {}
         self_data["name"] = self.name
         self_data["info"] = {
             "_sFile": self.filename,
             "_sDescription": self.description,
-            "_tsDateAdded": self.ts_date_added
+            "_tsDateAdded": self.ts_date_added,
         }
         self_data["pakfile"] = self.pakfile
         self_data["sigfile"] = self.sigfile
@@ -259,6 +244,7 @@ class ModLink:
     """
     Intermediary class between ModPage and Mod
     """
+
     def __init__(self, name: str, info: Dict):
         self.name = name
         self._info = info
@@ -271,7 +257,10 @@ class ModLink:
 
     def download(self) -> Mod:
         """
-        This is just to get the archives and extract them in a reasonable location
+        This is just to get the archives and extract them in a reasonable
+        location
+
+        :returns: Mod formed from downloaded files
         """
         if os.path.exists(self._download_path):
             logging.debug(f"Already downloaded mod at {self._download_path}")
@@ -282,7 +271,7 @@ class ModLink:
             with open(self._download_path, "wb") as fp:
                 fp.write(response.content)
 
-        decomp_paths = util.decompress(self._download_path, self.name)
+        decomp_paths = util.decompress_into_dir(self._download_path, self.name)
 
         pakfile = filter(lambda p: p.endswith(".pak"), decomp_paths)
         sigfile = filter(lambda p: p.endswith(".sig"), decomp_paths)
@@ -290,24 +279,29 @@ class ModLink:
         if not sigfile:
             original_sigfile = os.path.join(MODULE_DIR, "sigfile.sig")
             sigfile = pakfile.replace(".pak", ".sig")
-            shutil.copy(original_sigfile,  sigfile)
+            shutil.copy(original_sigfile, sigfile)
+        else:
+            sigfile = list(sigfile)[0]
 
         if not pakfile:
             e = f"No pakfile (.pak) found in archive {self.filename}"
             raise FileNotFoundError(e)
+        else:
+            pakfile = list(pakfile)[0]
 
-        return Mod(name, self._info, pakfile, sigfile)
+        return Mod(self.name, self._info, pakfile, sigfile)
 
 
 class ModPage:
     """
     Mods and mod metadata extracted from gamebanana webpages
     """
+
     def __init__(self, url: str):
         info_response = util.get_request(GB_INFO_URL.format(url.split("/")[-1]))
         page_response = util.get_request(url)
 
-        webpage = bs4.BeautifulSoup(page_response.content)
+        webpage = bs4.BeautifulSoup(page_response.content, "html.parser")
         title_tag = webpage.find(lambda tag: tag.get("id") == "PageTitle")
 
         self.name = list(title_tag.children)[0].strip().lower()
@@ -317,10 +311,62 @@ class ModPage:
         self.__mods = [ModLink(self.name, info) for info in self.__files_data]
 
     def __iter__(self) -> Dict:
-        yield from self._mods
+        yield from self.__mods
 
     def __len__(self) -> int:
-        return len(self._mods)
+        return len(self.__mods)
 
     def __getitem__(self, key) -> ModLink:
+        logging.debug(f"Getting {key-1}th item from {self.__mods}")
         return self.__mods[key]
+
+
+class ModDB:
+    """
+    Manage moddb.json stored mods - the stored JSON is a list of
+    JSON objects that can be restored to fully functional Mod()
+    python objects
+    """
+
+    def __init__(self):
+        self.path = os.path.join(CACHE_DIR, "mod_db.json")
+
+        if not os.path.exists(self.path):
+            with open(self.path, "w") as fp:
+                json.dump({"mods": []}, fp)
+
+        self._file_ro = open(self.path, "r")
+        self._db = json.load(self._file_ro)
+
+    def store_mod(self, mod: Mod) -> None:
+        """
+        Stores a mod as an object in a JSON file
+
+        :param mod: the mod to store in the file
+        """
+        mod_data = mod._convert_to_dict()
+        new_db = self._db.copy()
+
+        if mod_data not in new_db["mods"]:
+            new_db["mods"].append(mod_data)
+
+            with open(self.path, "w") as fp:
+                json.dump(new_db, fp)
+        else:
+            return
+
+    def get_mods(self) -> List[Mod]:
+        """
+        Returns all mods stored as objects in the JSON file
+
+        :returns: list of stored Mod objects
+        """
+        mods = [Mod(**data) for data in self._db["mods"]]
+        return mods
+
+    def clear(self) -> None:
+        """
+        Clears all mods in mod_db.json
+        """
+        with open(self.path, "w") as fp:
+            json.dump([], fp)

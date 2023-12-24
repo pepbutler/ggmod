@@ -1,33 +1,46 @@
 from argparse import ArgumentParser
 
-from ggmod.settings import *
 from ggmod import util
-from ggmod import mods
+from ggmod.settings import MODS_DIR, DOWNLOAD_DIR, GAME_MOD_DIR, CONF_DIR
+from ggmod.mods import ModPage, ModDB
 
-import logging
 import shutil
 import os
 
+import string
+
 
 def download(args):
-    for url in args.link:
-        modpage = mods.ModPage(url)
+    print(f"[*] Processing {len(args.link)} mods from GB...")
+    modpage = ModPage(args.link)
 
-        if len(modpage) > 1:
-            archives = []
+    if len(modpage) > 1:
+        for i, modlink in enumerate(modpage):
+            print(f"[{i+1}] {modlink.name} - {modlink.description}")
 
-            for i, mod in enumerate(modpage):
-                archives.append(mod.download())
-                if mod.is_mesh():
-                    print(f"[{i+1}] Mesh mod {mod.filename[0]} - {mod.description}")
-                else:
-                    print(f"[{i+1}] Colour{mod.get_slot()} mod {mod.filename[0]} - {mod.description}")
-
-            choice = int(input("[?] Choice: "))-1
-            modpage[choice].select(archives[choice])
+        choice = input("[?] Choice: ")
+        if not all(char in string.digits for char in choice):
+            choice = None
         else:
-            archives = mod.download()
-            mod.select(archives)
+            choice = int(choice) - 1
+    elif len(modpage) == 1:
+        modlink = modpage[0]
+        print(f"[*] Selected mod: {modlink.name} - {modlink.description}")
+        choice = 0 if util.input_yn("[?] Stage this archive (Y/n) ") else None
+
+    if choice or choice is not None:
+        print("[*] Staging mod...")
+
+        chosen_mod = modpage[choice].download()
+        chosen_mod.stage()
+
+        mod_db = ModDB()
+        mod_db.store_mod(chosen_mod)
+
+        print("[!] Done")
+    else:
+        print("[!] иди на хуй :D")
+        exit(0)
 
 
 def sync(args):
@@ -88,23 +101,37 @@ def parse_args():
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(help="List of subcommands")
 
-    # Big ol' list of subcommands and their respective arguments/functions
-    down_parser = subparsers.add_parser("download",
-            help="Download a mod from gamebanana link")
-    down_parser.add_argument("link", nargs="*",
-            help="Gamebanana mod page URL")
+    down_parser = subparsers.add_parser(
+        "download", help="Download a mod from gamebanana link"
+    )
+    down_parser.add_argument("link", help="Gamebanana mod page URL")
+    down_parser.add_argument(
+        "-s", "--slot", type=int, help="Specify the slot the color mod applies to"
+    )
+    down_parser.add_argument(
+        "-m", "--mesh", type=str, help="Specify as mesh mod (mutal exclusive w/ slot)"
+    )
     down_parser.set_defaults(func=download)
 
-    sync_parser = subparsers.add_parser("sync",
-            help="Sync local mods with game directory")
-    sync_parser.add_argument("-f", "--force", action="store_true",
-            help="Completly wipe the in-game mods directory and sync")
+    sync_parser = subparsers.add_parser(
+        "sync", help="Sync all local mods with game directory"
+    )
+    sync_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Completly wipe the in-game mods directory and sync",
+    )
     sync_parser.set_defaults(func=sync)
 
     args = parser.parse_args()
 
     if not any(vars(args).values()):
         parser.print_usage()
+    else:
+        if hasattr(args, "slot") and hasattr(args, "mesh"):
+            if args.slot and args.mesh:
+                parser.error("Cannot have both slot and mesh mod (use one!)")
 
     return args
 

@@ -3,6 +3,8 @@ import os
 
 from typing import List
 
+import requests
+
 
 def decompress_into_dir(path: str, dirname: str) -> List[str]:
     """
@@ -21,13 +23,14 @@ def decompress_into_dir(path: str, dirname: str) -> List[str]:
 
     logging.debug(f"Starting decompress in path {path}")
 
-    local_dir = path.rstrip(os.sep).split(os.sep)[:-1]
+    local_dir = f"{os.sep}".join(
+        path for path in path.rstrip(os.sep).split(os.sep)[:-1]
+    )
     new_dir = os.path.join(local_dir, dirname)
     create_dir(new_dir)
 
     os.system(f"7z e {path} -o{new_dir} ")
-    *_, files = os.walk(new_dir)
-
+    files = os.listdir(new_dir)
     logging.debug(f"Finished decompress in path {path}")
 
     return [os.path.join(new_dir, file) for file in files]
@@ -47,8 +50,6 @@ def get_request(url: str) -> requests.Response:
     Exception-handled GET request
     :param url: URL in string form
     """
-    import requests
-
     response = requests.get(url)
 
     if response.status_code > 399:
@@ -71,7 +72,7 @@ def configure_logging(level=logging.DEBUG):
     """
     Logging
     """
-    logging.basicConfig(format='[%(levelname)s]\t%(message)s', level=level)
+    logging.basicConfig(format="[%(levelname)s]\t%(message)s", level=level)
 
 
 def input_yn(prompt, *args):

@@ -18,6 +18,7 @@ setuptools.setup(
     install_requires=[
         "PyPAKParser==1.2.0",
         "requests>=2.31.0",
+        "beautifulsoup4>=4.12.2",
     ],
     #test_suite="tests",
     #include_package_data=True,

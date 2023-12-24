@@ -25,5 +25,5 @@ CHAR_IDS = {
     "TST": "Testament",
     "SIN": "Sin Kiske",
     "BGT": "Bridget",
-    "ELP": "Elphelt", 
+    "ELP": "Elphelt",
 }
