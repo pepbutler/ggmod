@@ -29,6 +29,7 @@ def decompress_into_dir(path: str, dirname: str) -> List[str]:
     new_dir = os.path.join(local_dir, dirname)
     create_dir(new_dir)
 
+    # this is poo
     os.system(f"7z e {path} -o{new_dir} ")
     files = os.listdir(new_dir)
     logging.debug(f"Finished decompress in path {path}")

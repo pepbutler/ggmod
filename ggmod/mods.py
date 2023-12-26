@@ -3,9 +3,11 @@ from ggmod.const import GB_INFO_URL, CHAR_IDS
 from ggmod.settings import CACHE_DIR, MODS_DIR, DOWNLOAD_DIR, MODULE_DIR
 from ggmod.errors import SlotNotFoundError, CharNotFoundError
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Generator, Optional, List
 
 from PyPAKParser import PakParser as PP
+
+from statistics import mode
 
 import logging
 import shutil
@@ -17,18 +19,19 @@ import re
 
 class Mod:
     """
-    Represents and individual mod, i.e. an Unreal Engine 4 .pak file that contains an
+    Represents an individual mod, i.e. an Unreal Engine 4 .pak file that contains an
     alternative mesh or color slot alteration
 
     Mod objects must have a name used for organising and referring to them in storage,
     as well as metadata from gamebanana and from the user. If not provided then determine
-    it automatically. The staging method allows the user to correct the generated
+    the latter automatically. The staging method allows the user to correct the generated
+    properties beforehand.
     """
 
     def __init__(
         self,
         name: str,
-        info: Dict[str, Any],
+        info: Dict[str, str],
         pakfile: str,
         sigfile: str,
         is_mesh: Optional[bool] = None,
@@ -58,7 +61,7 @@ class Mod:
 
         self._pp = PP(open(pakfile, "rb"))
         self._asset_paths = self._pp.List()
-        self._assets = map(lambda path: self._pp.Unpack(path), self._asset_paths)
+        self._assets = [self._pp.Unpack(path) for path in self._asset_paths]
 
         self._char_id = char_id if char_id is not None else self.determine_char_id()
         self._mesh = is_mesh if is_mesh is not None else self.determine_meshed_mod()
@@ -147,15 +150,12 @@ class Mod:
         Guesswork at which slot the colour mod applies to, being such
         it only works for non-mesh mods
 
+        This function sometimes never guesses the slot correctly
+
         :returns: either a string matching the slot code or False if the mod is mesh mod
         """
-
-        slt_match_bytes = (
-            f"{self.char_id}/Costume[0-9]+/Material/Color([0-9]+)".encode()
-        )
-        slot_search = list(
-            map(lambda asset: re.search(slt_match_bytes, asset.Data), self._assets)
-        )
+        slt_match_bytes = f"/Game/Chara/{self.char_id}/Costume[0-9]+/Material/Color([0-9]+)/{self.char_id}_base".encode()
+        slot_search = [re.search(slt_match_bytes, asset.Data) for asset in self._assets]
         matches = []
 
         for search_groups in slot_search:
@@ -165,26 +165,30 @@ class Mod:
                 except IndexError as e:
                     raise SlotNotFoundError from e
 
-        if not matches and not self.mesh:
+        if not matches:
             e = "No matching slot string in pak file"
             raise SlotNotFoundError(e)
         else:
             # return mode of the matches list (most common)
-            return max(matches, key=matches.count)
+            return mode(matches)
 
-    def override_props(self, is_mesh: bool, char_id: str, slot: int | str) -> None:
+    def override_props(self, **kwargs) -> None:
         """
         Override the properties if they are not detected properly. It's important
         to call this method BEFORE staging otherwise the mod will be categorised
         incorrectly
 
-        :param is_mesh: is a mesh mod - mutually exclusive with colour mods
-        :param char_id: three-letter character identification code
-        :param slot: the slot of which the colour mod applies to
+        :param kwargs:
+            is_mesh: is a mesh mod - mutually exclusive with colour mods
+            char_id: three-letter character identification code
+            slot: the slot of which the colour mod applies to
         """
-        self.mesh = is_mesh
-        self.char_id = char_id
-        self.slot = slot
+        if kwargs.get("is_mesh") is not None:
+            self.mesh = kwargs["is_mesh"]
+        if kwargs.get("slot") is not None:
+            self.slot = kwargs["slot"]
+        if kwargs.get("char_id") is not None:
+            self.char_id = kwargs["char_id"]
 
     def stage(self) -> None:
         """
@@ -193,9 +197,7 @@ class Mod:
         """
         stored_dir = os.path.join(MODS_DIR, self.name)
 
-        # pakfile = self.pakfile.strip(os.sep).split(os.sep)[-1]
-        # sigfile = self.sigfile.strip(os.sep).split(os.sep)[-1]
-
+        util.create_dir(stored_dir)
         shutil.copy(self.pakfile, stored_dir)
         shutil.copy(self.sigfile, stored_dir)
 
@@ -215,6 +217,9 @@ class Mod:
 
         os.remove(os.path.join(self.stored_dir, pakfile))
         os.remove(os.path.join(self.stored_dir, sigfile))
+        os.removedirs(self.stored_dir)
+
+        self.stored_dir = os.path.abspath(os.path.join(pakfile, os.pardir))
 
     def _convert_to_dict(self) -> str:
         """
@@ -310,7 +315,7 @@ class ModPage:
         self.__files_data = info_response.json()["_aFiles"]
         self.__mods = [ModLink(self.name, info) for info in self.__files_data]
 
-    def __iter__(self) -> Dict:
+    def __iter__(self) -> Generator:
         yield from self.__mods
 
     def __len__(self) -> int:

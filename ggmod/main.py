@@ -32,6 +32,8 @@ def download(args):
         print("[*] Staging mod...")
 
         chosen_mod = modpage[choice].download()
+        if hasattr(args, "slot"):
+            chosen_mod.override_props()
         chosen_mod.stage()
 
         mod_db = ModDB()
@@ -109,7 +111,7 @@ def parse_args():
         "-s", "--slot", type=int, help="Specify the slot the color mod applies to"
     )
     down_parser.add_argument(
-        "-m", "--mesh", type=str, help="Specify as mesh mod (mutal exclusive w/ slot)"
+        "-m", "--mesh", type=bool, help="Specify as mesh mod (mutal exclusive w/ slot)"
     )
     down_parser.set_defaults(func=download)
 
