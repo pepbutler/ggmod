@@ -33,7 +33,9 @@ def download(args):
 
         chosen_mod = modpage[choice].download()
         if hasattr(args, "slot"):
-            chosen_mod.override_props()
+            chosen_mod.override_props(slot=args.slot)
+        elif hasattr(args, "mesh"):
+            chosen_mod.override_props(mesh=True)
         chosen_mod.stage()
 
         mod_db = ModDB()
