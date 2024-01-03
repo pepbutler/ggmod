@@ -16,6 +16,8 @@ import bs4
 import json
 import re
 
+from typing import Union
+
 
 class Mod:
     """
@@ -31,7 +33,7 @@ class Mod:
     def __init__(
         self,
         name: str,
-        info: Dict[str, str],
+        info: Dict[str, Union[str, bool, int]],
         pakfile: str,
         sigfile: str,
         is_mesh: Optional[bool] = None,
@@ -75,14 +77,6 @@ class Mod:
     def char_id(self):
         return self._char_id
 
-    @property
-    def mesh(self):
-        return self._mesh
-
-    @property
-    def slot(self):
-        return self._slot
-
     @char_id.setter
     def char_id(self, value):
         if len(value) != 3 and value not in set(CHAR_IDS.keys()):
@@ -91,9 +85,17 @@ class Mod:
         else:
             self._char_id = value.upper()
 
+    @property
+    def mesh(self):
+        return self._mesh
+
     @mesh.setter
     def mesh(self, value: bool):
         self._mesh = value
+
+    @property
+    def slot(self):
+        return self._slot
 
     @slot.setter
     def slot(self, value: str | int):
@@ -247,7 +249,7 @@ class Mod:
 
 class ModLink:
     """
-    Intermediary class between ModPage and Mod
+    Intermediary thingy between ModPage and Mod
     """
 
     def __init__(self, name: str, info: Dict):
@@ -278,21 +280,22 @@ class ModLink:
 
         decomp_paths = util.decompress_into_dir(self._download_path, self.name)
 
-        pakfile = filter(lambda p: p.endswith(".pak"), decomp_paths)
-        sigfile = filter(lambda p: p.endswith(".sig"), decomp_paths)
+        pakfile_filter = filter(lambda p: p.endswith(".pak"), decomp_paths)
+        sigfile_filter = filter(lambda p: p.endswith(".sig"), decomp_paths)
 
-        if not sigfile:
+        if not pakfile_filter:
+            e = f"No pakfile (.pak) found in archive {self.filename}"
+            raise FileNotFoundError(e)
+        else:
+            pakfile = list(pakfile_filter)[0]
+
+        if not sigfile_filter:
+            logging.warn("No sigfile (.sig) file found in archive {self.filename}")
             original_sigfile = os.path.join(MODULE_DIR, "sigfile.sig")
             sigfile = pakfile.replace(".pak", ".sig")
             shutil.copy(original_sigfile, sigfile)
         else:
-            sigfile = list(sigfile)[0]
-
-        if not pakfile:
-            e = f"No pakfile (.pak) found in archive {self.filename}"
-            raise FileNotFoundError(e)
-        else:
-            pakfile = list(pakfile)[0]
+            sigfile = list(sigfile_filter)[0]
 
         return Mod(self.name, self._info, pakfile, sigfile)
 

@@ -147,6 +147,8 @@ def main():
     util.create_dir(GAME_MOD_DIR)
 
     args = parse_args()
+
+    # whenever not using subcommands e.g. --help
     if "func" in vars(args).keys():
         args.func(args)
 
