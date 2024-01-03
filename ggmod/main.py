@@ -29,13 +29,15 @@ def download(args):
         choice = 0 if util.input_yn("[?] Stage this archive (Y/n) ") else None
 
     if choice or choice is not None:
+        modlink = modpage[choice]
         print("[*] Staging mod...")
 
-        chosen_mod = modpage[choice].download()
         if hasattr(args, "slot"):
-            chosen_mod.override_props(slot=args.slot)
+            modlink.set_slot(args.slot)
         elif hasattr(args, "mesh"):
-            chosen_mod.override_props(mesh=True)
+            modlink.set_mesh(True)
+
+        chosen_mod = modlink.download()
         chosen_mod.stage()
 
         mod_db = ModDB()
