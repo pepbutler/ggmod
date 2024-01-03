@@ -261,6 +261,18 @@ class ModLink:
 
         self._download_url = info["_sDownloadUrl"]
         self._download_path = os.path.join(DOWNLOAD_DIR, self.filename)
+        self._mesh = None
+        self._slot = None
+        self._char_id = None
+
+    def set_mesh(self, value: bool):
+        self._mesh = value
+
+    def set_slot(self, value: int):
+        self._slot = value
+
+    def set_char_id(self, value: str):
+        self._char_id = value
 
     def download(self) -> Mod:
         """
@@ -297,7 +309,7 @@ class ModLink:
         else:
             sigfile = list(sigfile_filter)[0]
 
-        return Mod(self.name, self._info, pakfile, sigfile)
+        return Mod(self.name, self._info, pakfile, sigfile, self._mesh, self._slot, self._char_id)
 
 
 class ModPage:

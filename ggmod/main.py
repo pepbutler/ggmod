@@ -113,7 +113,7 @@ def parse_args():
         "-s", "--slot", type=int, help="Specify the slot the color mod applies to"
     )
     down_parser.add_argument(
-        "-m", "--mesh", type=bool, help="Specify as mesh mod (mutal exclusive w/ slot)"
+        "-m", "--mesh", action="store_true", help="Specify as mesh mod (mutal exclusive w/ slot)"
     )
     down_parser.set_defaults(func=download)
 
