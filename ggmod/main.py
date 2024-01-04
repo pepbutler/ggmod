@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from ggmod import util
 from ggmod.settings import MODS_DIR, DOWNLOAD_DIR, GAME_MOD_DIR, CONF_DIR
 from ggmod.mods import ModPage, ModDB
+from ggmod.errors import SlotNotFoundError, CharNotFoundError
 
 import shutil
 import os
@@ -41,6 +42,21 @@ def download(args):
         chosen_mod.stage()
 
         mod_db = ModDB()
+
+        try:
+            chosen_mod.determine_props()
+        except SlotNotFoundError:
+            if args.mesh:
+                chosen_mod.override_props(mesh=args.mesh, char_id=chosen_mod.char_id)
+            if args.slot:
+                chosen_mod.override_props(slot=args.slot, char_id=chosen_mod.char_id)
+        except CharNotFoundError as e:
+            if hasattr(args, "char"):
+                if args.char:
+                    chosen_mod.override_props(char_id=args.char)
+            else:
+                raise e
+
         mod_db.store_mod(chosen_mod)
 
         print("[!] Done")
@@ -115,7 +131,13 @@ def parse_args():
         "-s", "--slot", type=int, help="Specify the slot the color mod applies to"
     )
     down_parser.add_argument(
-        "-m", "--mesh", action="store_true", help="Specify as mesh mod (mutal exclusive w/ slot)"
+        "-c", "--char", type=str, help="Three-letter character ID, e.g. SOL, KYK"
+    )
+    down_parser.add_argument(
+        "-m",
+        "--mesh",
+        action="store_true",
+        help="Specify as mesh mod (mutal exclusive w/ slot)",
     )
     down_parser.set_defaults(func=download)
 

@@ -65,11 +65,27 @@ class Mod:
         self._asset_paths = self._pp.List()
         self._assets = [self._pp.Unpack(path) for path in self._asset_paths]
 
-        self._char_id = char_id if char_id is not None else self.determine_char_id()
-        self._mesh = is_mesh if is_mesh is not None else self.determine_meshed_mod()
+        self._char_id = char_id
+        self._mesh = is_mesh
+        if not is_mesh:
+            self._slot = slot
+        else:
+            raise ValueError("Cannot specify mod as mesh and colour slot mod")
+
+    def determine_props(self):
+        """
+        Hopefully a temporary method
+        """
+        self._char_id = (
+            self.char_id if self.char_id is not None else self.determine_char_id()
+        )
+
+        self._mesh = (
+            self.is_mesh if self.is_mesh is not None else self.determine_meshed_mod()
+        )
 
         if not self._mesh:
-            self._slot = slot if slot is not None else self.determine_slot()
+            self._slot = self.slot if self.slot is not None else self.determine_slot()
         else:
             self._slot = None
 
@@ -309,7 +325,15 @@ class ModLink:
         else:
             sigfile = list(sigfile_filter)[0]
 
-        return Mod(self.name, self._info, pakfile, sigfile, self._mesh, self._slot, self._char_id)
+        return Mod(
+            self.name,
+            self._info,
+            pakfile,
+            sigfile,
+            self._mesh,
+            self._slot,
+            self._char_id,
+        )
 
 
 class ModPage:
